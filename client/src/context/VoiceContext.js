@@ -60,6 +60,7 @@ export function VoiceProvider({ children }) {
   const mutedUsersRef = useRef(new Set());
   const channelIdRef = useRef(null);
   const selfStateRef = useRef(selfState);
+  const preDeafenMutedRef = useRef(null); // remembers mute state before enabling deafen
   const voiceUsersRef = useRef(voiceUsers);
 
   const audioRefs = useRef({}); // userId -> HTMLAudioElement
@@ -395,12 +396,27 @@ export function VoiceProvider({ children }) {
 
   const toggleDeafen = useCallback(() => {
     setSelfState(prev => {
-      const next = { ...prev, deafened: !prev.deafened };
+      const enablingDeafen = !prev.deafened;
+
+      // When deafening, also mute your mic.
+      // When undeafening, restore the prior mute state (if known).
+      let nextMuted = prev.muted;
+      if (enablingDeafen) {
+        preDeafenMutedRef.current = prev.muted;
+        nextMuted = true;
+      } else if (preDeafenMutedRef.current != null) {
+        nextMuted = !!preDeafenMutedRef.current;
+        preDeafenMutedRef.current = null;
+      }
+
+      const next = { ...prev, deafened: enablingDeafen, muted: nextMuted };
+
       applyRemoteAudioRouting({ deafened: next.deafened });
+      setLocalTrackEnabled(!next.muted);
       try { socket?.emit('voice:state', { channelId: channelIdRef.current, muted: next.muted, deafened: next.deafened }); } catch {}
       return next;
     });
-  }, [socket, applyRemoteAudioRouting]);
+  }, [socket, applyRemoteAudioRouting, setLocalTrackEnabled]);
 
   useEffect(() => {
     if (!socket) return;

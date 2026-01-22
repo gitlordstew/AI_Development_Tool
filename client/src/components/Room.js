@@ -552,6 +552,7 @@ function Room({ user, room, onLeaveRoom, onViewTimeline, onUserUpdated }) {
 
   const startDrawing = (e) => {
     if (!canDrawNow) return;
+    if (e?.cancelable) e.preventDefault();
     const p = getPointerPosition(e);
     if (!p) return;
 
@@ -573,6 +574,7 @@ function Room({ user, room, onLeaveRoom, onViewTimeline, onUserUpdated }) {
   const draw = (e) => {
     if (!isDrawing) return;
     if (!canDrawNow) return;
+    if (e?.cancelable) e.preventDefault();
     if (activePointerIdRef.current != null && e.pointerId !== activePointerIdRef.current) return;
 
     const p = getPointerPosition(e);
@@ -1020,7 +1022,11 @@ function Room({ user, room, onLeaveRoom, onViewTimeline, onUserUpdated }) {
                 <canvas
                   ref={canvasRef}
                   className={`draw-canvas-rave ${isDrawing ? 'is-drawing' : ''}`}
-                  style={{ touchAction: isDrawing && canDrawNow ? 'none' : 'pan-y' }}
+                  style={{
+                    // Mobile/tablet: explicit Draw Mode decides whether the canvas blocks scrolling.
+                    // Desktop: keep it draw-first.
+                    touchAction: isMobileDrawUI ? (drawModeEnabled ? 'none' : 'pan-y') : 'none'
+                  }}
                   onPointerDown={startDrawing}
                   onPointerMove={draw}
                   onPointerUp={stopDrawing}

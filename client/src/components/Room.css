@@ -458,6 +458,14 @@
 
 .draw-canvas-rave.is-drawing {
   touch-action: none;
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 768px) {
+  /* Extra guard on mobile browsers that aggressively scroll nested containers. */
+  .draw-canvas-rave {
+    overscroll-behavior: contain;
+  }
 }
 
 /* Right Sidebar - Chat */
