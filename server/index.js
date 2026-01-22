@@ -1808,6 +1808,11 @@ io.on('connection', (socket) => {
 
   // Leave Room
   socket.on('leaveRoom', () => {
+    // Ensure the socket leaves the Socket.IO room, otherwise the adapter can
+    // continue reporting a non-zero liveCount even after our in-memory membership
+    // has been updated.
+    const u = users.get(socket.id);
+    if (u?.currentRoom) socket.leave(u.currentRoom);
     handleLeaveRoom(socket.id);
   });
 
