@@ -1,4 +1,5 @@
 const nodemailer = require('nodemailer');
+const https = require('https');
 
 function parseIntEnv(key, fallback) {
   const raw = String(process.env[key] ?? '').trim();
@@ -20,13 +21,21 @@ function maskEmail(email) {
   return `${value.slice(0, 2)}***${value.slice(at)}`;
 }
 
-function isMailerConfigured() {
+function isSmtpConfigured() {
   return !!(
     process.env.SMTP_HOST &&
     process.env.SMTP_PORT &&
     process.env.SMTP_USER &&
     process.env.SMTP_PASS
   );
+}
+
+function isResendConfigured() {
+  return !!String(process.env.RESEND_API_KEY || '').trim();
+}
+
+function isMailerConfigured() {
+  return isResendConfigured() || isSmtpConfigured();
 }
 
 function getTransport() {
@@ -55,11 +64,93 @@ function getTransport() {
   });
 }
 
+function requestJson({ method, url, headers, body, timeoutMs }) {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const req = https.request(
+      {
+        method,
+        protocol: parsed.protocol,
+        hostname: parsed.hostname,
+        port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+        path: `${parsed.pathname}${parsed.search}`,
+        headers: {
+          'Content-Type': 'application/json',
+          ...headers
+        }
+      },
+      (res) => {
+        const chunks = [];
+        res.on('data', (d) => chunks.push(d));
+        res.on('end', () => {
+          const raw = Buffer.concat(chunks).toString('utf8');
+          const status = res.statusCode || 0;
+          let json = null;
+          try {
+            json = raw ? JSON.parse(raw) : null;
+          } catch {
+            json = null;
+          }
+          resolve({ status, raw, json });
+        });
+      }
+    );
+
+    if (timeoutMs && timeoutMs > 0) {
+      req.setTimeout(timeoutMs, () => {
+        req.destroy(new Error('Request timeout'));
+      });
+    }
+
+    req.on('error', reject);
+    req.write(JSON.stringify(body ?? {}));
+    req.end();
+  });
+}
+
+async function sendMailResend({ to, subject, html, text }) {
+  const apiKey = String(process.env.RESEND_API_KEY || '').trim();
+  if (!apiKey) return { ok: false, skipped: true, reason: 'RESEND_API_KEY not configured' };
+
+  // Resend requires a verified sender. For quick testing you can use: onboarding@resend.dev
+  const from = String(process.env.RESEND_FROM || process.env.SMTP_FROM || '').trim();
+  if (!from) {
+    return { ok: false, error: 'RESEND_FROM is required when using Resend' };
+  }
+
+  const timeoutMs = parseIntEnv('RESEND_TIMEOUT_MS', 15000);
+  const payload = {
+    from,
+    to,
+    subject,
+    html,
+    text
+  };
+
+  const { status, json, raw } = await requestJson({
+    method: 'POST',
+    url: 'https://api.resend.com/emails',
+    headers: {
+      Authorization: `Bearer ${apiKey}`
+    },
+    body: payload,
+    timeoutMs
+  });
+
+  if (status >= 200 && status < 300) return { ok: true, provider: 'resend', id: json?.id };
+
+  const message = json?.message || json?.error || raw || `HTTP ${status}`;
+  return { ok: false, provider: 'resend', error: `Resend error: ${message}` };
+}
+
 function getMailerDebugInfo() {
   const port = parseIntEnv('SMTP_PORT', 587);
   const secure = parseBoolEnv('SMTP_SECURE', port === 465);
   const from = process.env.SMTP_FROM || process.env.SMTP_USER;
   return {
+    provider: isResendConfigured() ? 'resend' : isSmtpConfigured() ? 'smtp' : 'none',
+    resendConfigured: isResendConfigured(),
+    resendFrom: maskEmail(process.env.RESEND_FROM),
     host: String(process.env.SMTP_HOST || ''),
     port,
     secure,
@@ -73,8 +164,16 @@ function getMailerDebugInfo() {
 }
 
 async function sendMail({ to, subject, html, text }) {
-  if (!isMailerConfigured()) {
-    return { ok: false, skipped: true, reason: 'SMTP not configured' };
+  if (isResendConfigured()) {
+    try {
+      return await sendMailResend({ to, subject, html, text });
+    } catch (error) {
+      return { ok: false, provider: 'resend', error: error?.message || String(error || 'Mail send failed') };
+    }
+  }
+
+  if (!isSmtpConfigured()) {
+    return { ok: false, skipped: true, reason: 'Email not configured (SMTP/Resend)' };
   }
 
   const transport = getTransport();
@@ -88,9 +187,9 @@ async function sendMail({ to, subject, html, text }) {
       html,
       text
     });
-    return { ok: true };
+    return { ok: true, provider: 'smtp' };
   } catch (error) {
-    return { ok: false, error: error?.message || String(error || 'Mail send failed') };
+    return { ok: false, provider: 'smtp', error: error?.message || String(error || 'Mail send failed') };
   }
 }
 
