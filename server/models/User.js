@@ -13,6 +13,33 @@ const UserSchema = new mongoose.Schema({
     maxlength: 30,
     unique: true
   },
+  email: {
+    type: String,
+    trim: true,
+    lowercase: true,
+    unique: true,
+    sparse: true
+  },
+  isEmailVerified: {
+    type: Boolean,
+    default: false
+  },
+  emailVerificationTokenHash: {
+    type: String,
+    default: null
+  },
+  emailVerificationExpiresAt: {
+    type: Date,
+    default: null
+  },
+  passwordResetTokenHash: {
+    type: String,
+    default: null
+  },
+  passwordResetExpiresAt: {
+    type: Date,
+    default: null
+  },
   password: {
     type: String // Only for registered accounts
   },
@@ -34,6 +61,10 @@ const UserSchema = new mongoose.Schema({
     default: ''
   },
   friends: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }],
+  blockedUsers: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   }],

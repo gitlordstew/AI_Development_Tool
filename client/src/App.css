@@ -5,19 +5,36 @@
 }
 
 :root {
-  --primary: #6366f1;
-  --primary-dark: #4f46e5;
-  --secondary: #8b5cf6;
-  --background: #0f172a;
-  --surface: #1e293b;
-  --surface-light: #334155;
+  --primary: #5865f2;
+  --primary-dark: #4752c4;
+  --secondary: #eb459e;
+  --background: #0b0d13;
+  --surface: rgba(24, 26, 33, 0.78);
+  --surface-light: rgba(36, 39, 49, 0.78);
   --text: #f8fafc;
-  --text-muted: #94a3b8;
+  --text-muted: rgba(148, 163, 184, 0.95);
   --success: #10b981;
   --danger: #ef4444;
   --warning: #f59e0b;
-  --border: #475569;
-  --shadow: rgba(0, 0, 0, 0.3);
+  --border: rgba(255, 255, 255, 0.12);
+  --shadow: rgba(0, 0, 0, 0.45);
+  --app-padding: 0px;
+
+  /* Compatibility variables (existing component CSS) */
+  --bg-dark: var(--background);
+  --card-bg: var(--surface);
+  --border-color: var(--border);
+  --primary-color: var(--primary);
+  --accent-color: var(--secondary);
+  --text-color: var(--text);
+  --text-secondary: var(--text-muted);
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 body {
@@ -25,17 +42,25 @@ body {
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--background);
   color: var(--text);
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 .App {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
+  height: 100dvh;
+  width: 100%;
+  display: block;
+  padding: var(--app-padding);
+  overflow: hidden;
+}
+
+/* Landing page: allow the App container to scroll vertically when needed. */
+.App.app-scroll {
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
 }
 
 /* Buttons */
@@ -70,12 +95,13 @@ button {
 }
 
 .btn-secondary {
-  background: var(--surface-light);
+  background: rgba(255, 255, 255, 0.08);
   color: var(--text);
+  border: 1px solid var(--border);
 }
 
 .btn-secondary:hover {
-  background: var(--border);
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .btn-danger {
@@ -103,8 +129,8 @@ input, textarea {
   font-size: 14px;
   padding: 12px 16px;
   border-radius: 12px;
-  border: 2px solid var(--border);
-  background: var(--surface);
+  border: 1px solid var(--border);
+  background: rgba(15, 23, 42, 0.35);
   color: var(--text);
   outline: none;
   transition: all 0.2s ease;
@@ -113,7 +139,7 @@ input, textarea {
 
 input:focus, textarea:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+  box-shadow: 0 0 0 3px rgba(88, 101, 242, 0.18);
 }
 
 input::placeholder, textarea::placeholder {
@@ -180,6 +206,7 @@ input::placeholder, textarea::placeholder {
   padding: 24px;
   box-shadow: 0 20px 60px var(--shadow);
   backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
 }
 
 /* Badge */
@@ -209,7 +236,7 @@ input::placeholder, textarea::placeholder {
 /* Responsive */
 @media (max-width: 768px) {
   .App {
-    padding: 10px;
+    --app-padding: 10px;
   }
   
   .btn {

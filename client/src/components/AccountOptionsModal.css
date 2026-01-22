@@ -1,0 +1,96 @@
+.account-modal {
+  max-width: 780px;
+  width: min(92vw, 780px);
+  max-height: min(88dvh, 860px);
+  overflow: auto;
+  padding: 22px;
+}
+
+.account-modal input[type="file"] {
+  width: 100%;
+  max-width: 100%;
+}
+
+.account-modal__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.account-modal__notice {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(255, 210, 90, 0.12);
+  border: 1px solid rgba(255, 210, 90, 0.3);
+}
+
+.account-modal__error {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(255, 90, 90, 0.12);
+  border: 1px solid rgba(255, 90, 90, 0.35);
+}
+
+.account-modal__success {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(90, 255, 140, 0.12);
+  border: 1px solid rgba(90, 255, 140, 0.25);
+}
+
+.account-modal__section {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+
+.account-modal__section h3 {
+  margin: 0 0 12px 0;
+}
+
+.account-modal__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.account-modal__input {
+  flex: 1;
+  min-width: 220px;
+}
+
+@media (max-width: 520px) {
+  .account-modal {
+    padding: 16px;
+    max-height: min(90dvh, 920px);
+  }
+
+  .account-modal__header {
+    flex-wrap: wrap;
+  }
+
+  .account-modal__row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .account-modal__input {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .account-modal__row .btn {
+    width: 100%;
+  }
+}
+
+.account-modal__hint {
+  font-size: 12px;
+  opacity: 0.85;
+}

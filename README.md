@@ -1,50 +1,57 @@
-# Hangout Bar 🎉
+# Hangout Bar
 
-> A real-time social hangout space built for the SmartFlowLabs assessment challenge
+A real-time social hangout space built for the SmartFlowLabs assessment challenge.
 
-A collaborative platform where you can chat, watch YouTube together, and draw with friends in real-time!
+## Features
 
-## ✨ Features
+- Rooms: real-time chat, YouTube sync, drawing canvas, and a lightweight “guess” game
+- Social: profiles, timelines, friend requests, notifications
+- Messaging: direct messages (DMs)
+- Feed: posts + comments
+- Voice: Discord-like voice per room (mute/deafen + speaking indicator)
+- Auth: accounts + guest mode, email verification, password reset
 
-- 💬 **Real-time Chat** - Instant messaging with friends in your room
-- 🎵 **Synchronized YouTube/YouTube Music** - Watch videos together in perfect sync
-- 🎨 **Collaborative Drawing** - Draw together on a shared canvas
-- 👥 **Friend System** - Add friends and invite them to your rooms
-- 🏠 **Public & Private Rooms** - Create or join hangout spaces
-- 📱 **Fully Responsive** - Works seamlessly on mobile, tablet, and desktop
+## Tech
 
-## 🚀 Tech Stack
+- Client: React (CRA), Socket.IO client
+- Server: Node.js, Express, Socket.IO, MongoDB (Mongoose), Nodemailer
+- Voice: WebRTC mesh signaling over Socket.IO
 
-**Backend:** Node.js, Express, Socket.IO  
-**Frontend:** React 18, Socket.IO Client, YouTube IFrame API, Canvas API  
-**Styling:** Modern CSS with smooth animations
+## Project structure
 
-## 📦 Installation
+```
+server/     # Express + Socket.IO API/signaling + Mongo models
+client/     # React app
+```
+
+## Local setup
+
+1) Backend env
+- Copy `.env.example` to `.env` and fill values.
+- Important: never commit `.env` (it contains secrets).
+
+2) Frontend env
+- Copy `client/.env.example` to `client/.env.local` and adjust if needed.
+
+3) Install + run
 
 ```bash
-# Install backend dependencies
-npm install
-
-# Install frontend dependencies
-cd client && npm install
-
-# Run both backend and frontend
+npm run install-all
 npm run dev
 ```
 
-Visit `http://localhost:3000` to start hanging out!
+- Backend: `http://localhost:5000`
+- Frontend: `http://localhost:3000`
 
-## 🎯 Usage
+## Email verification / password reset
 
-1. Enter your name and choose an avatar
-2. Create a room or join an existing one
-3. Chat, watch YouTube together, and draw!
-4. Add friends and invite them to private rooms
+- If SMTP isn’t configured, the server logs verification/reset links to the console.
+- For real emails, set the SMTP variables in `.env`.
+- Set `SERVER_PUBLIC_URL` and `CLIENT_URL` to public URLs in production so links work.
 
-## 🏗️ Deployment
+## Deployment notes
 
-Built for easy deployment on Vercel, Netlify, Railway, or Render.
+- Recommended: Railway or Render (Socket.IO + WebRTC signaling require a long-lived server).
+- Vercel “all-in-one” is not recommended for Socket.IO/WebRTC.
 
----
-
-**Challenge task from SmartFlowLabs**
+See `DEPLOYMENT.md` for environment variables and platform steps.
