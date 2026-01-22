@@ -173,6 +173,9 @@ async function sendVerificationEmail({ email, token }) {
     console.log(`\n[Email skipped: SMTP not configured] Verification link for ${email}: ${verifyUrl}\n`);
   } else if (result?.ok === false) {
     console.error(`[Email failed] Verification email to ${email}: ${result?.error || 'unknown error'}`);
+    if (/^(1|true|yes)$/i.test(String(process.env.EMAIL_LOG_LINKS || '').trim())) {
+      console.log(`\n[Email failed: link fallback] Verification link for ${email}: ${verifyUrl}\n`);
+    }
   }
 
   return result;
@@ -841,7 +844,7 @@ app.post('/api/users/signup', async (req, res) => {
       user.emailVerificationTokenHash = hashToken(token);
       user.emailVerificationExpiresAt = new Date(Date.now() + EMAIL_VERIFY_EXPIRES_MS);
       await user.save();
-      await sendVerificationEmail({ email: normalizedEmail, token });
+      const mailResult = await sendVerificationEmail({ email: normalizedEmail, token });
       
       res.json({ 
         success: true, 
@@ -855,7 +858,11 @@ app.post('/api/users/signup', async (req, res) => {
           isGuest: false
         }, 
         token: user._id.toString(),
-        verificationSent: true
+        verificationSent: mailResult?.ok === true,
+        mailConfigured: isMailerConfigured(),
+        mailOk: mailResult?.ok === true,
+        mailSkipped: !!mailResult?.skipped,
+        mailProvider: mailResult?.provider || null
       });
     } else {
       res.json({ success: true, user: { username, avatar, profilePicture, isGuest: false }});
@@ -1067,8 +1074,15 @@ app.post('/api/auth/resend-verification', async (req, res) => {
     user.emailVerificationExpiresAt = new Date(Date.now() + EMAIL_VERIFY_EXPIRES_MS);
     await user.save();
 
-    await sendVerificationEmail({ email: normalizedEmail, token });
-    res.json({ success: true, sent: true });
+    const mailResult = await sendVerificationEmail({ email: normalizedEmail, token });
+    res.json({
+      success: true,
+      sent: mailResult?.ok === true,
+      mailConfigured: isMailerConfigured(),
+      mailOk: mailResult?.ok === true,
+      mailSkipped: !!mailResult?.skipped,
+      mailProvider: mailResult?.provider || null
+    });
   } catch (error) {
     res.status(400).json({ success: false, error: error.message });
   }

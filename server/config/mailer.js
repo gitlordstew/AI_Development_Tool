@@ -112,11 +112,9 @@ async function sendMailResend({ to, subject, html, text }) {
   const apiKey = String(process.env.RESEND_API_KEY || '').trim();
   if (!apiKey) return { ok: false, skipped: true, reason: 'RESEND_API_KEY not configured' };
 
-  // Resend requires a verified sender. For quick testing you can use: onboarding@resend.dev
-  const from = String(process.env.RESEND_FROM || process.env.SMTP_FROM || '').trim();
-  if (!from) {
-    return { ok: false, error: 'RESEND_FROM is required when using Resend' };
-  }
+  // Resend requires a verified sender.
+  const from = String(process.env.RESEND_FROM || process.env.SMTP_FROM || 'onboarding@resend.dev').trim();
+  const usingDefaultTestingFrom = !String(process.env.RESEND_FROM || '').trim();
 
   const timeoutMs = parseIntEnv('RESEND_TIMEOUT_MS', 15000);
   const payload = {
@@ -137,7 +135,9 @@ async function sendMailResend({ to, subject, html, text }) {
     timeoutMs
   });
 
-  if (status >= 200 && status < 300) return { ok: true, provider: 'resend', id: json?.id };
+  if (status >= 200 && status < 300) {
+    return { ok: true, provider: 'resend', id: json?.id, testingFrom: usingDefaultTestingFrom };
+  }
 
   const message = json?.message || json?.error || raw || `HTTP ${status}`;
   return { ok: false, provider: 'resend', error: `Resend error: ${message}` };
