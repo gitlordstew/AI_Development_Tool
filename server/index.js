@@ -22,11 +22,59 @@ const { sendMail, isMailerConfigured, getMailerDebugInfo } = require('./config/m
 
 const app = express();
 const server = http.createServer(app);
+
+function parseAllowedOrigins(raw) {
+  const value = String(raw || '').trim();
+  if (!value) return [];
+
+  const normalizeOrigin = (input) => {
+    const text = String(input || '').trim();
+    if (!text) return null;
+    if (text === '*') return '*';
+
+    // If someone sets CLIENT_URL to a full URL with a path or trailing slash,
+    // normalize it to the origin so it matches the browser's Origin header.
+    // Example: "https://example.com/" -> "https://example.com"
+    try {
+      if (/^https?:\/\//i.test(text)) return new URL(text).origin;
+    } catch {
+      // fall through
+    }
+
+    return text.replace(/\/$/, '');
+  };
+
+  const origins = value
+    .split(',')
+    .map(s => normalizeOrigin(s))
+    .filter(Boolean);
+
+  // De-dupe while preserving order.
+  return Array.from(new Set(origins));
+}
+
+const allowedClientOrigins = parseAllowedOrigins(process.env.CLIENT_URL);
+const allowAllSocketOrigins = allowedClientOrigins.length === 0 || allowedClientOrigins.includes('*');
+
+// In many deployments we're behind a reverse proxy (Render/Railway/Heroku/etc).
+// Trust proxy headers so Express behaves correctly for secure requests.
+app.set('trust proxy', 1);
+
 const io = socketIO(server, {
   cors: {
-    origin: process.env.CLIENT_URL || 'http://localhost:3000',
-    methods: ['GET', 'POST']
-  }
+    origin: (origin, cb) => {
+      // Some clients (native apps / certain browsers) may omit Origin.
+      if (!origin) return cb(null, true);
+      if (allowAllSocketOrigins) return cb(null, true);
+      if (allowedClientOrigins.includes(origin)) return cb(null, true);
+      return cb(new Error(`Socket origin not allowed: ${origin}`));
+    },
+    methods: ['GET', 'POST'],
+    credentials: true
+  },
+  transports: ['polling', 'websocket'],
+  pingTimeout: 20000,
+  pingInterval: 25000
 });
 
 // Bump this string when diagnosing deployments / stale server processes.
@@ -36,6 +84,29 @@ const DEBUG_LOGS = /^(1|true|yes)$/i.test(String(process.env.DEBUG_LOGS || '').t
 const debugLog = (...args) => {
   if (DEBUG_LOGS) console.log(...args);
 };
+
+app.get('/api/health', (req, res) => {
+  res.json({
+    ok: true,
+    build: SERVER_BUILD,
+    time: new Date().toISOString(),
+    allowedClientOrigins,
+    allowAllSocketOrigins,
+    nodeEnv: process.env.NODE_ENV || 'development'
+  });
+});
+
+io.engine.on('connection_error', (err) => {
+  const headers = err?.context?.req?.headers;
+  console.error('[socket.io] connection_error', {
+    code: err?.code,
+    message: err?.message,
+    origin: headers?.origin,
+    referer: headers?.referer,
+    userAgent: headers?.['user-agent'],
+    context: DEBUG_LOGS ? err?.context : undefined
+  });
+});
 
 if (process.env.NODE_ENV === 'production') {
   try {
@@ -48,7 +119,17 @@ if (process.env.NODE_ENV === 'production') {
   }
 }
 
-app.use(cors());
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true);
+      if (allowAllSocketOrigins) return cb(null, true);
+      if (allowedClientOrigins.includes(origin)) return cb(null, true);
+      return cb(new Error(`CORS origin not allowed: ${origin}`));
+    },
+    credentials: true
+  })
+);
 // Allow small base64 profile pictures (after client-side crop/resize).
 app.use(express.json({ limit: '4mb' }));
 
@@ -1588,7 +1669,8 @@ io.on('connection', (socket) => {
       socket.leave(user.currentRoom);
       const oldRoom = rooms.get(user.currentRoom);
       if (oldRoom) {
-        oldRoom.removeMember(socket.id);
+        const oldEmpty = oldRoom.removeMember(socket.id);
+        if (oldEmpty) scheduleEmptyRoomDeletion(oldRoom);
         io.to(user.currentRoom).emit('userLeft', {
           userId: user.id,
           username: user.username
@@ -1997,10 +2079,14 @@ io.on('connection', (socket) => {
       if (room.guessGame.drawerUserId !== user.id) return;
     }
 
-    room.drawings.push(drawData);
+    const payload = (drawData && typeof drawData === 'object')
+      ? { ...drawData, by: socket.id, userId: user.id }
+      : { type: 'draw', x: 0, y: 0, color: '#000000', width: 1, by: socket.id, userId: user.id };
+
+    room.drawings.push(payload);
     if (room.drawings.length > 5000) room.drawings.shift();
-    
-    socket.to(user.currentRoom).emit('drawing', drawData);
+
+    socket.to(user.currentRoom).emit('drawing', payload);
   });
 
   socket.on('clearCanvas', () => {
@@ -3189,7 +3275,19 @@ function broadcastRoomList() {
     .limit(200)
     .lean()
     .then(async (docs) => {
-      const hostIds = Array.from(new Set(docs.map(d => d.host).filter(Boolean)));
+      // Hide rooms that have been empty (no connected sockets) for > 5 minutes.
+      // This keeps the lobby clean without deleting MongoDB documents.
+      const cutoffMs = Date.now() - EMPTY_ROOM_DELETE_AFTER_MS;
+      const visibleDocs = (docs || []).filter(d => {
+        const roomId = d?._id?.toString?.() || '';
+        if (!roomId) return false;
+        const liveCount = io.sockets.adapter.rooms.get(roomId)?.size || 0;
+        const lastActivityMs = d?.lastActivity ? new Date(d.lastActivity).getTime() : 0;
+        const isInactive = lastActivityMs > 0 && lastActivityMs < cutoffMs;
+        return !(liveCount === 0 && isInactive);
+      });
+
+      const hostIds = Array.from(new Set(visibleDocs.map(d => d.host).filter(Boolean)));
       const usersById = new Map();
       try {
         const hostUsers = await User.find({ _id: { $in: hostIds } }).select('username').lean();
@@ -3198,7 +3296,7 @@ function broadcastRoomList() {
         // ignore
       }
 
-      io.emit('roomList', docs.map(d => ({
+      io.emit('roomList', visibleDocs.map(d => ({
         id: d._id.toString(),
         name: d.name,
         memberCount: Array.isArray(d.members) ? d.members.length : 0,

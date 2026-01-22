@@ -177,6 +177,7 @@ function Room({ user, room, onLeaveRoom, onViewTimeline, onUserUpdated }) {
   const [isDrawing, setIsDrawing] = useState(false);
   const [drawColor, setDrawColor] = useState('#ffffff');
   const [drawWidth, setDrawWidth] = useState(3);
+  const lastPointBySenderRef = useRef(new Map());
 
   const messagesEndRef = useRef(null);
 
@@ -302,12 +303,37 @@ function Room({ user, room, onLeaveRoom, onViewTimeline, onUserUpdated }) {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    canvas.width = canvas.offsetWidth;
-    canvas.height = canvas.offsetHeight;
+    const resizeAndRedraw = () => {
+      const c = canvasRef.current;
+      if (!c) return;
 
-    if (room.drawings) {
-      room.drawings.forEach(drawData => drawOnCanvas(drawData));
-    }
+      // Run after layout settles (important on mobile + when switching tabs)
+      requestAnimationFrame(() => {
+        const width = Math.max(1, c.offsetWidth);
+        const height = Math.max(1, c.offsetHeight);
+        if (c.width !== width) c.width = width;
+        if (c.height !== height) c.height = height;
+
+        // Redraw all strokes.
+        const ctx = c.getContext('2d');
+        if (ctx) ctx.clearRect(0, 0, c.width, c.height);
+        lastPointBySenderRef.current = new Map();
+        if (room.drawings) {
+          room.drawings.forEach(drawData => drawOnCanvas(drawData));
+        }
+      });
+    };
+
+    resizeAndRedraw();
+
+    const onResize = () => resizeAndRedraw();
+    window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onResize);
+
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('orientationchange', onResize);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
@@ -399,25 +425,38 @@ function Room({ user, room, onLeaveRoom, onViewTimeline, onUserUpdated }) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    const senderKey = String(drawData?.by || drawData?.socketId || drawData?.userId || '__legacy__');
+    const lastMap = lastPointBySenderRef.current;
+
     if (drawData.type === 'start') {
-      ctx.beginPath();
-      ctx.moveTo(drawData.x, drawData.y);
-      ctx.strokeStyle = drawData.color;
-      ctx.lineWidth = drawData.width;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
+      // Store starting point for this sender. We don't rely on a shared canvas path
+      // because multiple users can draw concurrently.
+      lastMap.set(senderKey, { x: drawData.x, y: drawData.y });
       return;
     }
 
     if (drawData.type === 'draw') {
-      ctx.strokeStyle = drawData.color;
-      ctx.lineWidth = drawData.width;
+      const last = lastMap.get(senderKey);
+      const fromX = last?.x ?? drawData.x;
+      const fromY = last?.y ?? drawData.y;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(fromX, fromY);
       ctx.lineTo(drawData.x, drawData.y);
+      ctx.strokeStyle = drawData.color;
+      ctx.lineWidth = Number(drawData.width) || 1;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
       ctx.stroke();
+      ctx.restore();
+
+      lastMap.set(senderKey, { x: drawData.x, y: drawData.y });
     }
   };
 
   const startDrawing = (e) => {
+    if (e?.type?.startsWith('touch') && e.cancelable) e.preventDefault();
     const isDrawer = guessGame?.active && guessGame?.drawerUserId === user.id;
     const canDraw = !guessGame?.active || (guessGame?.phase === 'DRAW' && isDrawer);
     if (!canDraw) return;
@@ -437,6 +476,7 @@ function Room({ user, room, onLeaveRoom, onViewTimeline, onUserUpdated }) {
 
   const draw = (e) => {
     if (!isDrawing) return;
+    if (e?.type?.startsWith('touch') && e.cancelable) e.preventDefault();
 
     const isDrawer = guessGame?.active && guessGame?.drawerUserId === user.id;
     const canDraw = !guessGame?.active || (guessGame?.phase === 'DRAW' && isDrawer);
@@ -472,6 +512,7 @@ function Room({ user, room, onLeaveRoom, onViewTimeline, onUserUpdated }) {
     }
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    lastPointBySenderRef.current = new Map();
   };
 
   // Guess Game controls

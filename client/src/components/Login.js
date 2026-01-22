@@ -37,7 +37,7 @@ const PROFILE_TEMPLATES = [
 ];
 
 function Login({ onLogin, inviteRoomId }) {
-  const { socket, connected, registerUser } = useSocket();
+  const { socket, connected, connectionError, registerUser } = useSocket();
   const [mode, setMode] = useState('choose'); // 'choose', 'guest', 'login', 'signup'
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -516,7 +516,11 @@ function Login({ onLogin, inviteRoomId }) {
 
           <div className="login-status" aria-live="polite">
             <span className={`login-status__dot ${connected ? 'is-on' : 'is-off'}`} aria-hidden="true" />
-            <span className="login-status__text">{connected ? 'Server online' : 'Connecting to server…'}</span>
+            <span className="login-status__text">
+              {connected
+                ? 'Server online'
+                : (connectionError ? `Connection error: ${connectionError}` : 'Connecting to server…')}
+            </span>
             <span className="login-status__sep" aria-hidden="true">•</span>
             <span className="login-status__meta">Secure sign-in + guest mode</span>
           </div>

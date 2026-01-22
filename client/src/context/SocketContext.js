@@ -14,14 +14,25 @@ export const useSocket = () => {
 export const SocketProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
   const [connected, setConnected] = useState(false);
+  const [connectionError, setConnectionError] = useState('');
   const lastRegisteredRef = useRef({ socketId: null, userId: null, username: null });
 
   useEffect(() => {
-    const socketURL = process.env.REACT_APP_SOCKET_URL || 'http://localhost:5000';
+    const envURL = process.env.REACT_APP_SOCKET_URL;
+    const socketURL = envURL
+      ? envURL
+      : (typeof window !== 'undefined' && window.location && window.location.origin
+          ? window.location.origin
+          : 'http://localhost:5000');
+
     const newSocket = io(socketURL, {
-      transports: ['websocket', 'polling'],
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
+      // Start with polling for maximum compatibility; upgrade to websocket when possible.
+      transports: ['polling', 'websocket'],
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 500,
+      reconnectionDelayMax: 5000,
+      timeout: 20000,
     });
 
     const registerUser = (userData) => {
@@ -45,6 +56,7 @@ export const SocketProvider = ({ children }) => {
     newSocket.on('connect', () => {
       console.log('Connected to server');
       setConnected(true);
+      setConnectionError('');
 
       // Auto-register from saved session (once per connection)
       try {
@@ -65,6 +77,17 @@ export const SocketProvider = ({ children }) => {
     newSocket.on('disconnect', () => {
       console.log('Disconnected from server');
       setConnected(false);
+    });
+
+    newSocket.on('connect_error', (err) => {
+      const msg = String(err?.message || 'Unable to connect to server');
+      console.warn('[socket] connect_error', err);
+      setConnected(false);
+      setConnectionError(msg);
+    });
+
+    newSocket.io?.on?.('reconnect_failed', () => {
+      setConnectionError('Reconnection failed. Please refresh or try again later.');
     });
 
     setSocket(newSocket);
@@ -90,7 +113,7 @@ export const SocketProvider = ({ children }) => {
   };
 
   return (
-    <SocketContext.Provider value={{ socket, connected, registerUser }}>
+    <SocketContext.Provider value={{ socket, connected, connectionError, registerUser }}>
       {children}
     </SocketContext.Provider>
   );
