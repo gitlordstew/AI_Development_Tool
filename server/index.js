@@ -18,7 +18,7 @@ const RoomModel = require('./models/Room');
 const FeedPost = require('./models/FeedPost');
 const DirectMessage = require('./models/DirectMessage');
 const User = require('./models/User');
-const { sendMail, isMailerConfigured } = require('./config/mailer');
+const { sendMail, isMailerConfigured, getMailerDebugInfo } = require('./config/mailer');
 
 const app = express();
 const server = http.createServer(app);
@@ -36,6 +36,17 @@ const DEBUG_LOGS = /^(1|true|yes)$/i.test(String(process.env.DEBUG_LOGS || '').t
 const debugLog = (...args) => {
   if (DEBUG_LOGS) console.log(...args);
 };
+
+if (process.env.NODE_ENV === 'production') {
+  try {
+    const configured = isMailerConfigured();
+    const info = getMailerDebugInfo();
+    console.log(`✉️  SMTP configured: ${configured ? 'yes' : 'no'}`);
+    console.log('✉️  SMTP settings:', info);
+  } catch {
+    // ignore
+  }
+}
 
 app.use(cors());
 // Allow small base64 profile pictures (after client-side crop/resize).
