@@ -30,9 +30,9 @@ services:
 
       # Email (optional). Leave blank to log verify/reset links in server logs.
       - key: SMTP_HOST
-        sync: false
+        value: smtp.gmail.com
       - key: SMTP_PORT
-        sync: false
+        value: "587"
       - key: SMTP_USER
         sync: false
       - key: SMTP_PASS
@@ -40,7 +40,7 @@ services:
       - key: SMTP_FROM
         sync: false
       - key: SMTP_SECURE
-        sync: false
+        value: "false"
 
   - type: static
     name: hangout-bar-web
