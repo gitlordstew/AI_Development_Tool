@@ -178,6 +178,33 @@ function Room({ user, room, onLeaveRoom, onViewTimeline, onUserUpdated }) {
   const [drawColor, setDrawColor] = useState('#ffffff');
   const [drawWidth, setDrawWidth] = useState(3);
   const lastPointBySenderRef = useRef(new Map());
+  const activePointerIdRef = useRef(null);
+  const [isMobileDrawUI, setIsMobileDrawUI] = useState(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return false;
+    return window.matchMedia('(max-width: 768px)').matches;
+  });
+  const [drawModeEnabled, setDrawModeEnabled] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia('(max-width: 768px)');
+    const update = () => {
+      const mobile = !!mq.matches;
+      setIsMobileDrawUI(mobile);
+      // Default OFF on mobile for easy scrolling; default ON conceptually on desktop.
+      if (!mobile) setDrawModeEnabled(false);
+    };
+
+    update();
+    try {
+      mq.addEventListener('change', update);
+      return () => mq.removeEventListener('change', update);
+    } catch {
+      // Safari older fallback
+      mq.addListener(update);
+      return () => mq.removeListener(update);
+    }
+  }, []);
 
   const messagesEndRef = useRef(null);
 
@@ -428,73 +455,138 @@ function Room({ user, room, onLeaveRoom, onViewTimeline, onUserUpdated }) {
     const senderKey = String(drawData?.by || drawData?.socketId || drawData?.userId || '__legacy__');
     const lastMap = lastPointBySenderRef.current;
 
+    const toLocalPoint = (d) => {
+      // Preferred: normalized coordinates (0..1) so drawings scale across devices.
+      if (typeof d?.nx === 'number' && typeof d?.ny === 'number') {
+        return { x: d.nx * canvas.width, y: d.ny * canvas.height };
+      }
+
+      // Legacy: raw pixel coords. If sender included its canvas size, scale into our canvas.
+      const x = Number(d?.x);
+      const y = Number(d?.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+      const srcW = Number(d?.srcW);
+      const srcH = Number(d?.srcH);
+      if (Number.isFinite(srcW) && srcW > 0 && Number.isFinite(srcH) && srcH > 0) {
+        return { x: (x / srcW) * canvas.width, y: (y / srcH) * canvas.height };
+      }
+      return { x, y };
+    };
+
+    const toLocalWidth = (d) => {
+      // Preferred: normalized brush width relative to min canvas dimension.
+      if (typeof d?.wn === 'number' && Number.isFinite(d.wn)) {
+        return Math.max(1, d.wn * Math.min(canvas.width, canvas.height));
+      }
+
+      // Legacy: raw pixel width.
+      const w = Number(d?.width);
+      return Number.isFinite(w) ? w : 1;
+    };
+
     if (drawData.type === 'start') {
       // Store starting point for this sender. We don't rely on a shared canvas path
       // because multiple users can draw concurrently.
-      lastMap.set(senderKey, { x: drawData.x, y: drawData.y });
+      const p = toLocalPoint(drawData);
+      if (p) lastMap.set(senderKey, p);
       return;
     }
 
     if (drawData.type === 'draw') {
+      const p = toLocalPoint(drawData);
+      if (!p) return;
+
       const last = lastMap.get(senderKey);
-      const fromX = last?.x ?? drawData.x;
-      const fromY = last?.y ?? drawData.y;
+      const fromX = last?.x ?? p.x;
+      const fromY = last?.y ?? p.y;
 
       ctx.save();
       ctx.beginPath();
       ctx.moveTo(fromX, fromY);
-      ctx.lineTo(drawData.x, drawData.y);
+      ctx.lineTo(p.x, p.y);
       ctx.strokeStyle = drawData.color;
-      ctx.lineWidth = Number(drawData.width) || 1;
+      ctx.lineWidth = toLocalWidth(drawData);
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       ctx.stroke();
       ctx.restore();
 
-      lastMap.set(senderKey, { x: drawData.x, y: drawData.y });
+      lastMap.set(senderKey, { x: p.x, y: p.y });
     }
   };
 
-  const startDrawing = (e) => {
-    if (e?.type?.startsWith('touch') && e.cancelable) e.preventDefault();
+  const canDrawNow = (() => {
     const isDrawer = guessGame?.active && guessGame?.drawerUserId === user.id;
-    const canDraw = !guessGame?.active || (guessGame?.phase === 'DRAW' && isDrawer);
-    if (!canDraw) return;
+    const allowedByGame = !guessGame?.active || (guessGame?.phase === 'DRAW' && isDrawer);
 
-    setIsDrawing(true);
+    // Desktop: always allow drawing when game rules allow.
+    // Mobile/tablet: require explicit "Draw mode" to avoid hijacking scroll.
+    if (!isMobileDrawUI) return allowedByGame;
+    return allowedByGame && drawModeEnabled;
+  })();
+
+  const getPointerPosition = (e) => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
-
+    if (!canvas) return null;
     const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX || e.touches?.[0]?.clientX) - rect.left;
-    const y = (e.clientY || e.touches?.[0]?.clientY) - rect.top;
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    return { x, y };
+  };
 
-    const drawData = { type: 'start', x, y, color: drawColor, width: drawWidth };
+  const buildNormalizedDrawData = (type, x, y) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const w = Math.max(1, canvas.width);
+    const h = Math.max(1, canvas.height);
+    const minDim = Math.max(1, Math.min(w, h));
+    return {
+      type,
+      nx: x / w,
+      ny: y / h,
+      // width normalized to min dimension so it looks similar across devices
+      wn: Number(drawWidth) / minDim,
+      color: drawColor
+    };
+  };
+
+  const startDrawing = (e) => {
+    if (!canDrawNow) return;
+    const p = getPointerPosition(e);
+    if (!p) return;
+
+    try {
+      canvasRef.current?.setPointerCapture?.(e.pointerId);
+    } catch {
+      // ignore
+    }
+
+    activePointerIdRef.current = e.pointerId;
+    setIsDrawing(true);
+
+    const drawData = buildNormalizedDrawData('start', p.x, p.y);
+    if (!drawData) return;
     drawOnCanvas(drawData);
     socket.emit('draw', drawData);
   };
 
   const draw = (e) => {
     if (!isDrawing) return;
-    if (e?.type?.startsWith('touch') && e.cancelable) e.preventDefault();
+    if (!canDrawNow) return;
+    if (activePointerIdRef.current != null && e.pointerId !== activePointerIdRef.current) return;
 
-    const isDrawer = guessGame?.active && guessGame?.drawerUserId === user.id;
-    const canDraw = !guessGame?.active || (guessGame?.phase === 'DRAW' && isDrawer);
-    if (!canDraw) return;
+    const p = getPointerPosition(e);
+    if (!p) return;
 
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX || e.touches?.[0]?.clientX) - rect.left;
-    const y = (e.clientY || e.touches?.[0]?.clientY) - rect.top;
-
-    const drawData = { type: 'draw', x, y, color: drawColor, width: drawWidth };
+    const drawData = buildNormalizedDrawData('draw', p.x, p.y);
+    if (!drawData) return;
     drawOnCanvas(drawData);
     socket.emit('draw', drawData);
   };
 
-  const stopDrawing = () => {
+  const stopDrawing = (e) => {
+    if (activePointerIdRef.current != null && e?.pointerId != null && e.pointerId !== activePointerIdRef.current) return;
+    activePointerIdRef.current = null;
     setIsDrawing(false);
   };
 
@@ -903,6 +995,19 @@ function Room({ user, room, onLeaveRoom, onViewTimeline, onUserUpdated }) {
                     />
                     <span>{drawWidth}px</span>
                   </div>
+
+                  {isMobileDrawUI && (
+                    <button
+                      type="button"
+                      className={`btn ${drawModeEnabled ? 'btn-primary' : 'btn-secondary'} draw-mode-toggle`}
+                      onClick={() => setDrawModeEnabled(v => !v)}
+                      title={drawModeEnabled ? 'Draw mode is ON (scroll disabled while drawing)' : 'Draw mode is OFF (scroll-friendly)'}
+                      disabled={guessGame?.active && !(guessGame?.phase === 'DRAW' && guessGame?.drawerUserId === user.id) && guessGame?.active}
+                    >
+                      {drawModeEnabled ? 'Draw mode: ON' : 'Draw mode: OFF'}
+                    </button>
+                  )}
+
                   <button
                     className="btn btn-danger"
                     onClick={() => clearCanvas(true)}
@@ -914,14 +1019,13 @@ function Room({ user, room, onLeaveRoom, onViewTimeline, onUserUpdated }) {
 
                 <canvas
                   ref={canvasRef}
-                  className="draw-canvas-rave"
-                  onMouseDown={startDrawing}
-                  onMouseMove={draw}
-                  onMouseUp={stopDrawing}
-                  onMouseLeave={stopDrawing}
-                  onTouchStart={startDrawing}
-                  onTouchMove={draw}
-                  onTouchEnd={stopDrawing}
+                  className={`draw-canvas-rave ${isDrawing ? 'is-drawing' : ''}`}
+                  style={{ touchAction: isDrawing && canDrawNow ? 'none' : 'pan-y' }}
+                  onPointerDown={startDrawing}
+                  onPointerMove={draw}
+                  onPointerUp={stopDrawing}
+                  onPointerCancel={stopDrawing}
+                  onPointerLeave={stopDrawing}
                 />
               </div>
             )}

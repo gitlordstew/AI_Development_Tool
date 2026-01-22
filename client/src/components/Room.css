@@ -453,6 +453,10 @@
   border-radius: 16px;
   cursor: crosshair;
   background: white;
+  touch-action: pan-y;
+}
+
+.draw-canvas-rave.is-drawing {
   touch-action: none;
 }
 
@@ -861,6 +865,18 @@
   gap: 20px;
   align-items: center;
   flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+  .draw-controls {
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .draw-controls .draw-mode-toggle {
+    width: 100%;
+    justify-content: center;
+  }
 }
 
 /* Guess Game panel */
