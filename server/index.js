@@ -5,6 +5,7 @@ const cors = require('cors');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
+const fs = require('fs');
 const path = require('path');
 const mongoose = require('mongoose');
 const multer = require('multer');
@@ -56,13 +57,23 @@ let useDatabase = false;
 
 let uploadsBucket = null;
 
-// Serve static files in production
+// Serve static files in production *only if* the client build exists.
+// When deploying the frontend separately (e.g., Render Static Site), the backend
+// won't have `client/build`, and attempting to serve it causes ENOENT errors.
 if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../client/build')));
-  // Do not intercept API routes.
-  app.get(/^(?!\/api).*/, (req, res) => {
-    res.sendFile(path.join(__dirname, '../client/build/index.html'));
-  });
+  const clientBuildDir = path.join(__dirname, '../client/build');
+  const clientIndexHtml = path.join(clientBuildDir, 'index.html');
+
+  if (fs.existsSync(clientIndexHtml)) {
+    app.use(express.static(clientBuildDir));
+    // Do not intercept API routes.
+    app.get(/^(?!\/api).*/, (req, res) => {
+      res.sendFile(clientIndexHtml);
+    });
+  } else {
+    console.warn('⚠️  Client build not found at', clientBuildDir);
+    console.warn('   Skipping static file serving (deploy the client separately).');
+  }
 }
 
 // In-memory storage (fallback when no database)
