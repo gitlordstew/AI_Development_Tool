@@ -49,7 +49,7 @@ services:
     autoDeployTrigger: commit
     rootDir: client
     buildCommand: npm install && npm run build
-    staticPublishPath: client/build
+    staticPublishPath: build
     envVars:
       # Point the React app at your backend.
       - key: REACT_APP_SOCKET_URL
