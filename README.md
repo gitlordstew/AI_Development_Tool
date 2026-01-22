@@ -1,10 +1,10 @@
-# Hangout Bar
+﻿# Hangout Bar
 
 A real-time social hangout space built for the SmartFlowLabs assessment challenge.
 
 ## Features
 
-- Rooms: real-time chat, YouTube sync, drawing canvas, and a lightweight “guess” game
+- Rooms: real-time chat, YouTube sync, drawing canvas, and a lightweight â€œguessâ€ game
 - Social: profiles, timelines, friend requests, notifications
 - Messaging: direct messages (DMs)
 - Feed: posts + comments
@@ -24,7 +24,7 @@ server/     # Express + Socket.IO API/signaling + Mongo models
 client/     # React app
 ```
 
-## Local setup
+## Email verification / password reset
 
 1) Backend env
 - Copy `.env.example` to `.env` and fill values.
@@ -43,15 +43,12 @@ npm run dev
 - Backend: `http://localhost:5000`
 - Frontend: `http://localhost:3000`
 
+Health check:
+- `http://localhost:5000/api/health`
+
 ## Email verification / password reset
 
-- If SMTP isn’t configured, the server logs verification/reset links to the console.
+- If SMTP isnâ€™t configured, the server logs verification/reset links to the console.
 - For real emails, set the SMTP variables in `.env`.
 - Set `SERVER_PUBLIC_URL` and `CLIENT_URL` to public URLs in production so links work.
 
-## Deployment notes
-
-- Recommended: Railway or Render (Socket.IO + WebRTC signaling require a long-lived server).
-- Vercel “all-in-one” is not recommended for Socket.IO/WebRTC.
-
-See `DEPLOYMENT.md` for environment variables and platform steps.

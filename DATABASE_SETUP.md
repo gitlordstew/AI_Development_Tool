@@ -9,6 +9,10 @@ Hangout Bar uses MongoDB (Mongoose) for persistence:
 - ✅ Messages (optional)
 - ✅ Room data (optional)
 
+Notes:
+- The app can run in memory-only mode (no MongoDB) if `ALLOW_IN_MEMORY=true`, but social/auth/persistence features degrade.
+- Rooms have a `lastActivity` field used for ordering and inactivity cleanup logic.
+
 ## Setup Options
 
 ### Option 1: Local MongoDB (Recommended for Development)
@@ -143,9 +147,11 @@ Server running on port 5000
   members: [ObjectId1, ObjectId2],
   youtube: {
     videoId: "abc123",
-    isPlaying: true,
-    currentTime: 45
-  }
+    playing: true,
+    timestamp: 45,
+    lastUpdate: Date
+  },
+  lastActivity: Date
 }
 ```
 

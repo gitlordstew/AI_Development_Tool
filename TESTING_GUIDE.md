@@ -35,12 +35,14 @@ npm run dev
 - Join/leave room and confirm member list updates
 - Chat: send messages, verify scroll + system join/leave messages
 - YouTube tab: load a video URL and confirm sync across two browsers
-- Draw tab: draw/clear and confirm sync across two browsers
+- Draw tab: draw/clear and confirm sync across two devices (desktop + phone)
+	- On mobile, toggle **Draw mode** ON to draw; OFF to scroll
+	- Drawings use normalized coordinates so the same board maps correctly across different screen sizes
 
 ## Voice
 
 - Join voice in a room (two browsers)
-- Verify mute/deafen toggles
+- Verify mute/deafen toggles (deafen also auto-mutes)
 - Verify speaking indicator appears when talking
 - Verify “profile mute” locally mutes that user’s audio only
 
@@ -48,9 +50,3 @@ npm run dev
 
 - Create a post, comment/reply (including deep threads)
 - DM another user and verify mobile layout (list vs chat view)
-
-## Production sanity
-
-- Ensure `.env` is not tracked (`git status` should never show it)
-- Set `CLIENT_URL` and `SERVER_PUBLIC_URL` to public URLs so email links work
-- Use HTTPS in production (required for microphone access)

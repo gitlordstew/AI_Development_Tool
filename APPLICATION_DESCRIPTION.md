@@ -19,7 +19,7 @@ Hangout Bar is a real-time “virtual hangout” app where users can create/join
 
 - Real-time depth: Socket.IO powers chat/presence/activity sync; WebRTC adds Discord-like voice
 - Persistence: MongoDB (Mongoose) stores users, profiles, friendships, DMs, and feed content
-- UX polish: responsive layouts down to very small screens (e.g., ~344px), fixed scrolling behavior, and mobile-first DM navigation
+- UX polish: responsive layouts, mobile-first DM navigation, and a collaborative drawing canvas that scales correctly across device sizes
 
 ## Tech stack
 
